@@ -251,11 +251,13 @@ int main(int argc, char **argv)
       strcat(filename,number);
       strcpy(vmcheck,filename);strcpy(icurr,filename); strcpy(concent, filename); strcpy(timestep,filename); strcpy(tension,filename);
       strcat(vmcheck, "vmcheck.csv");strcat(icurr, "icurr.csv");strcat(concent, "conc.csv");strcat(timestep, "timestep.csv");strcat(tension, "tension.csv");
+      /// create cell object, then initialise ----------------------
       contr_cell = new Land_2016();
       chem_cell = new ohara_rudy_cipa_v1_2017();
-      
       chem_cell->initConsts(0., bcl, conc, IC50[sample_idx].data, herg_input[sample_idx].herg);
       contr_cell->initConsts(false, false, y);
+      // -----------------------^^^^^^^----------------------------
+
       printf("Initialised\n");
       snprintf(buffer, sizeof(buffer), vmcheck);
       fp_vm = fopen(buffer, "w");
@@ -274,9 +276,10 @@ int main(int argc, char **argv)
 
       pace_max = 20;
      
-      tcurr = 33.0;
+      tcurr = 0.0;
       dt = 0.001;
-      tmax = pace_max*bcl; // TODO: Use this to display current pace
+      // dt = 0.1;
+      tmax = pace_max*bcl;
       printer=0;
       pacer=0; 
       pace_count=0;
@@ -290,6 +293,8 @@ int main(int argc, char **argv)
       {
         // cai_index = tcurr;
           // compute ODE at tcurr
+
+          // -----------------vvvvvvvvvvvv----------------------------------
         chem_cell->computeRates(tcurr,
                     chem_cell->CONSTANTS,
                     chem_cell->RATES,
@@ -304,7 +309,6 @@ int main(int argc, char **argv)
                     contr_cell->STATES,
                     contr_cell->ALGEBRAIC,
                     y);
-
         
           // forward euler only
           chem_cell->solveAnalytical(0, 
@@ -324,6 +328,9 @@ int main(int argc, char **argv)
             contr_cell->solveEuler(dt, tcurr, (chem_cell->STATES[cai]));
             // the states cai from chem might be -nan at 2nd loop
           }
+          
+          // -------------------^^^^^^^^^^--------------------------------
+
         // }
         pacer++;
         if (pacer==bcl/dt){
