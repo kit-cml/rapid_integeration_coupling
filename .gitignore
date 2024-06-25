@@ -1,5 +1,4 @@
-*.plt
-*.dat
-result/*
-bin/orudy_cell_sim
-nohup.out
+template/params.txt
+template/simulation.log
+template/vmcheck_bepridil_33.plt
+template/params.txt

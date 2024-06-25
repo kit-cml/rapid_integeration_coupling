@@ -1,86 +1,55 @@
-## Makefile for C++ project using Boost
-#
-# @author Cedric "levif" Le Dillau
-# @modified Aroli Marcellinus 
-#
-# Some notes:
-# - Using ':=' instead of '=' assign the value at Makefile parsing time,
-#   others are evaluated at usage time. This discards
-# - Use ':set list' in Vi/Vim to show tabs (Ctrl-v-i force tab insertion)
-#
+# Compiler
+CXX=g++
 
-# List to '.PHONY' all fake targets, those that are neither files nor folders.
-# "all" and "clean" are good candidates.
-.PHONY: all, clean
+# Compiler flags
+CXXFLAGS=-std=c++17 -Wall -Iinclude -I/home/ali/dev/eigen 
 
-# Define the final program name
-PROGNAME := orudy_cell_sim
+# Directories
+SRC_DIR=src
+INCLUDE_DIR=include
+OBJ_DIR=obj
+BIN_DIR=bin
 
-# Pre-processor flags to be used for includes (-I) and defines (-D) 
-CPPFLAGS := -I/opt/prog/sundial/include/
+# Target executable name
+TARGET=$(BIN_DIR)/CiPAORdv1
 
-# CXX to set the compiler
-CXX := g++
+# Find all cpp files in the src directory plus the main.cpp file
+SOURCES=$(wildcard $(SRC_DIR)/*.cpp) main.cpp
+# Convert the .cpp files to .o to specify the object files in the obj directory
+OBJECTS=$(SOURCES:%.cpp=$(OBJ_DIR)/%.o)
+# Generate paths for dependency files by replacing the source directory with the object directory in the paths
+DEPS=$(OBJECTS:.o=.d)
 
-# CXXFLAGS is used for C++ compilation options.
-#CXXFLAGS += -Wall -O0 -fpermissive -std=c++11
-#CXXFLAGS += -Wall -O2 -fno-alias -fpermissive
-CXXFLAGS += -Wall
-# Use this if you want to use Land 2019 cell model.
-# Otherwise, comment it
-CXXFLAGS += -DLAND_2016
-# Use this if you want to use analytical solution.
-# Otherwise, comment it
-CXXFLAGS += -DANALYTICAL
+# Default make target
+all: $(TARGET)
 
-CXXFLAGS += -DDEBUG
+# Create the obj/src directory before compiling anything
+$(shell mkdir -p $(OBJ_DIR)/src)
 
-# LDFLAGS is used for linker (-g enables debug symbols)
-# LDFLAGS  += -g -L/usr/local/lib -lsundials_cvode -lsundials_nvecserial
-LDFLAGS  += -g -L/usr/local/lib 
+# Link the object files into a binary
+$(TARGET): $(OBJECTS)
+	$(CXX) $(CXXFLAGS) $^ -o $@
 
-# List the project' sources to compile or let the Makefile recognize
-# them for you using 'wildcard' function.
-#
-SOURCES	= $(wildcard **/*.cpp) $(wildcard **/*.c) main.cpp
+# Compile the cpp files into object files
+# Rule for main.cpp
+$(OBJ_DIR)/main.o: main.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# List the project' headers or let the Makefile recognize
-# them for you using 'wildcard' function.
-#
-HEADERS	= $(wildcard **/*.hpp) $(wildcard **/*.h)
+# Rule for other source files
+$(OBJ_DIR)/src/%.o: $(SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Construct the list of object files based on source files using
-# simple extension substitution.
-OBJECTS := $(SOURCES:%.cpp=%.o)
+# Clean up build files
+clean:
+	rm -rf $(OBJ_DIR) $(TARGET)
 
-#
-# Now declare the dependencies rules and targets
-#
-# Starting with 'all' make it  becomes the default target when none 
-# is specified on 'make' command line.
-all : $(PROGNAME)
+# Include dependencies
+-include $(DEPS)
 
-# Declare that the final program depends on all objects and the Makfile
-$(PROGNAME) : $(OBJECTS) Makefile
-	$(CXX) -o bin/$@ $(OBJECTS) $(LDFLAGS)
+# Rule to generate a dependency file by using the C++ preprocessor, including for main.cpp
+$(OBJ_DIR)/%.d: %.cpp
+	$(CXX) $(CXXFLAGS) -MM -MT '$(@:.d=.o)' $< -MF $@
 
-# Now the choice of using implicit rules or not (my choice)...
-#
-# Choice 1: use implicit rules and then we only need to add some dependencies
-#           to each object.
-#
-## Tells make that each object file depends on all headers and this Makefile.
-#$(OBJECTS) : $(HEADERS) Makefile
-#
-# Choice 2: don't use implicit rules and specify our will
-%.o: %.cpp $(HEADERS) Makefile
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $(OUTPUT_OPTION) $<
-
-
-# Simple clean-up target
-# notes:
-# - the '@' before 'echo' informs make to hide command invocation.
-# - the '-' before 'rm' command to informs make to ignore errors.
-clean :
-	@echo "Clean."
-	-rm -rf *.o **/*.o bin/$(PROGNAME)
+# Adjusted rule for dependency files in the src directory
+$(OBJ_DIR)/src/%.d: $(SRC_DIR)/%.cpp
+	$(CXX) $(CXXFLAGS) -MM -MT '$(@:.d=.o)' $< -MF $@
