@@ -5,6 +5,7 @@
 #include <string>
 
 struct simulation_params {
+    double celltype;
     int forward_euler_only;
     double bcl;
     int beats;

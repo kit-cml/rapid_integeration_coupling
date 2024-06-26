@@ -24,7 +24,13 @@ simulation_params load_params(const char* filename) {
             std::cerr << "Failed to read key on line: " << line << std::endl;
             continue;
         }
-        if (key == "forward_euler_only") {
+        if (key == "celltype") {
+            if (!(iss >> tempDouble)) {
+                std::cerr << "Invalid format for euler only" << std::endl;
+                continue;
+            }
+            params.celltype = tempDouble;
+        } else if (key == "forward_euler_only") {
             if (!(iss >> tempInt)) {
                 std::cerr << "Invalid format for euler only" << std::endl;
                 continue;

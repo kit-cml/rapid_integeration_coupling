@@ -74,7 +74,7 @@ void solveBDF1(double time, double dt, double epsilon, void* user_data){
       norm = norm + delta[i] * delta[i];
     }
     norm = sqrt(norm);
-    if (norm < 1e-5){
+    if (norm < epsilon){
       break;
     }    
   }
@@ -95,6 +95,7 @@ int main(int argc, char* argv[]){
   // Load params
   simulation_params params = load_params(argv[1]);
   std::cout << "Running simulation with parameters:" << std::endl;
+  std::cout << "celltype : " << params.celltype << std::endl;
   std::cout << "forward_euler_only : " << params.forward_euler_only << std::endl;
   std::cout << "bcl (ms): " << params.bcl << std::endl;
   std::cout << "beats : " << params.beats << std::endl;
@@ -150,7 +151,7 @@ int main(int argc, char* argv[]){
     std::string vmcheck_name;
     start = clock();
     p_elec = new ohara_rudy_cipa_v1_2017();
-    p_elec->initConsts(0.0,conc,hill.hill,herg.herg); // drug effects
+    p_elec->initConsts(params.celltype,conc,hill.hill,herg.herg); // drug effects
     p_elec->CONSTANTS[BCL] = params.bcl;
     p_mech = new Land_2016();
     p_mech->initConsts(false, false, y);

@@ -2,7 +2,7 @@
 CXX=g++
 
 # Compiler flags
-CXXFLAGS=-std=c++17 -Wall -Iinclude -I/home/ali/dev/eigen 
+CXXFLAGS=-std=c++17 -Wall -Iinclude #-I/home/ali/dev/eigen 
 
 # Directories
 SRC_DIR=src
