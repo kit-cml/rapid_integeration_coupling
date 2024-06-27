@@ -120,7 +120,7 @@ if (CONSTANTS[lambda] >= 1.2){
 void Land_2016::computeRates(double TIME, double *CONSTANTS, double *RATES, double *STATES, double *ALGEBRAIC, double *y)
 {
 // XB model
-
+double eta;
 // lambda = min(1.2,lambda);
 // Lfac =  max(0, 1 + beta_0 * (lambda + min(0.87,lambda) - 1.87) );
 
@@ -221,13 +221,13 @@ CONSTANTS[C] = CONSTANTS[lambda] - 1;
 //  eta = eta_l;
 // end
 if ((CONSTANTS[C] - CONSTANTS[Cd]) < 0) {
-        CONSTANTS[eta] = CONSTANTS[eta_s];
+       eta = CONSTANTS[eta_s];
     } else {
-        CONSTANTS[eta] = CONSTANTS[eta_l];
+       eta = CONSTANTS[eta_l];
     }
 
 // dCd_dt = par_k * (C - Cd) / eta; % F2=Fd
-STATES[dCd_dt] = CONSTANTS[par_k] * (CONSTANTS[C] - CONSTANTS[Cd]) / CONSTANTS[eta];
+STATES[dCd_dt] = CONSTANTS[par_k] * (CONSTANTS[C] - CONSTANTS[Cd]) / eta;
 // dydt(7) = dCd_dt;
 RATES[dCd_dt] = STATES[dCd_dt];
 
