@@ -1,5 +1,6 @@
 #include "ohara_rudy_cipa_v1_2017.hpp"
 #include "Land_2016.hpp"
+#include "cipaordv1_land2016.hpp"
 
 #include "omp.h"
 #include "simulationparams.h"
@@ -76,7 +77,10 @@ void solveBDF1(double time, double dt, double epsilon, void* user_data){
     norm = sqrt(norm);
     if (norm < epsilon){
       break;
-    }    
+    }   
+    if (iter == 999){
+      std::cout << "BDF1 max iteration exceeded!\n";
+    }
   }
   for (int i = 0; i < data->states_size; i++){
     data->STATES[i] = y_new[i];
@@ -137,7 +141,7 @@ int main(int argc, char* argv[]){
     double dtw = params.dtw;
     double t_next = t_curr + dtw;
     double next_write_time = t_max - params.bcl;
-    double epsilon = 1e-6;
+    double epsilon = 1e-5;
     double conc = params.conc[conc_id];
     // Input for Land model
     double y[7] = {0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0};
@@ -146,7 +150,8 @@ int main(int argc, char* argv[]){
     int imax = int((t_max - next_write_time) / dtw) + 1;// + ((int(t_max) - int(next_write_time)) % int(dtw) == 0 ? 0 : 1);
     Cellmodel* p_elec;
     Cellmodel* p_mech;
-    std::ofstream vmcheck;
+    Cellmodel* p_em;
+    std::ofstream vmcheck, em_vmcheck;
     std:: ostringstream file_name;
     std::string vmcheck_name;
     start = clock();
@@ -155,6 +160,10 @@ int main(int argc, char* argv[]){
     p_elec->CONSTANTS[BCL] = params.bcl;
     p_mech = new Land_2016();
     p_mech->initConsts(false, false, y);
+    p_em = new cipaordv1_land2016();
+    p_em->initConsts(params.celltype,conc,hill.hill,herg.herg,false,false); // cipaordv1 drug effects and land2016
+    p_em->CONSTANTS[land2016_cai_scaling] = double(params.cai_scaling);
+    p_em->CONSTANTS[cipaordv1_BCL] = params.bcl;
     if (params.forward_euler_only == 1){
       file_name << "vmcheck_";
       file_name << params.drug_name << "_";
@@ -199,55 +208,86 @@ int main(int argc, char* argv[]){
         vmcheck << "\n";
       }
     }
+    vmcheck_name = "em_" + file_name.str();
+    em_vmcheck.open(vmcheck_name.c_str());
+    em_vmcheck << "Time" << "\t";
+    em_vmcheck << "dt" << "\t";
+    em_vmcheck << "INa" << "\t";
+    em_vmcheck << "INaL" << "\t";
+    em_vmcheck << "Ito" << "\t";
+    em_vmcheck << "ICaL" << "\t";
+    em_vmcheck << "ICaNa" << "\t";
+    em_vmcheck << "ICaK" << "\t";
+    em_vmcheck << "IKr" << "\t";
+    em_vmcheck << "IKs" << "\t";
+    em_vmcheck << "IK1" << "\t";
+    em_vmcheck << "INaCa_i" << "\t";
+    em_vmcheck << "INaCa_ss" << "\t";
+    em_vmcheck << "INaK" << "\t";
+    em_vmcheck << "INab" << "\t";
+    em_vmcheck << "IKb" << "\t";
+    em_vmcheck << "IpCa" << "\t";
+    em_vmcheck << "ICab" << "\t";
+    em_vmcheck << "Tension" << "\t";
+    for(int i = 0; i < p_em->states_size; i++) {
+      em_vmcheck << "STATES[" << i << "]";
+      if(i < p_em->states_size-1) {// Add a tab for all but the last element
+        em_vmcheck << "\t";
+      } else {// End the line after the last element
+        em_vmcheck << "\n";
+      }
+    }
     int iprint = 0;
     while(iprint<imax){
-      p_elec->computeRates(t_curr,
-                          p_elec->CONSTANTS,
-                          p_elec->RATES,
-                          p_elec->STATES,
-                          p_elec->ALGEBRAIC,
-                          p_mech->RATES[TRPN]);
+      if (cai_scaling == 1){
+        p_mech->CONSTANTS[Cai] = p_elec->STATES[cai]*1000.;
+      }
+      else{
+        p_mech->CONSTANTS[Cai] = p_elec->STATES[cai];
+      }
       p_mech->computeRates(t_curr,
                           p_mech->CONSTANTS,
                           p_mech->RATES,
                           p_mech->STATES,
                           p_mech->ALGEBRAIC,
                           y);
+      p_elec->computeRates(t_curr,
+                          p_elec->CONSTANTS,
+                          p_elec->RATES,
+                          p_elec->STATES,
+                          p_elec->ALGEBRAIC,
+                          p_mech->RATES[TRPN]);
+      p_em->computeRates(t_curr,
+                          p_em->CONSTANTS,
+                          p_em->RATES,
+                          p_em->STATES,
+                          p_em->ALGEBRAIC);
       if (params.forward_euler_only == 1){
         dt = min_dt;
         if (t_curr + dt >= next_write_time) {
           dt = next_write_time - t_curr;
         }
+        p_mech->solveEuler(dt);//, t_curr, (p_elec->STATES[cai]));
         p_elec->solveEuler(dt);
-        if (cai_scaling == 1){
-          p_mech->CONSTANTS[Cai] = p_elec->STATES[cai]*1000.;
-          p_mech->solveEuler(dt);//, t_curr, (p_elec->STATES[cai]*1000.));
-        }
-        else{
-          p_mech->CONSTANTS[Cai] = p_elec->STATES[cai];
-          p_mech->solveEuler(dt);//, t_curr, (p_elec->STATES[cai]));
-        }
+        p_em->solveEuler(dt);
       } else {
         if (t_curr <= time_point || (t_curr - floor(t_curr / p_elec->CONSTANTS[BCL]) * p_elec->CONSTANTS[BCL]) <= time_point){
           dt = min_dt;
-          if (t_curr + dt >= next_write_time) {
-            dt = next_write_time - t_curr;
-          }
         } else {
           dt = max_dt;
-          if (t_curr + dt >= next_write_time) {
-            dt = next_write_time - t_curr;
-          }
+        }
+        if (t_curr + dt >= next_write_time) {
+          dt = next_write_time - t_curr;
         }
         solveBDF1(t_curr,dt,epsilon,p_elec);
         if (cai_scaling == 1){
           p_mech->CONSTANTS[Cai] = p_elec->STATES[cai]*1000.;
           solveBDF1(t_curr,dt,epsilon,p_mech);
-        }
-        else{
+        } else {
           p_mech->CONSTANTS[Cai] = p_elec->STATES[cai];
           solveBDF1(t_curr,dt,epsilon,p_mech);
         }
+        solveBDF1(t_curr,dt,epsilon,p_em);
       }
       t_curr = t_curr + dt;
       if (t_curr >= next_write_time){
@@ -282,18 +322,47 @@ int main(int argc, char* argv[]){
           vmcheck << "\n";
           }
         }
+        em_vmcheck << iprint * dtw << "\t";
+        em_vmcheck << dt << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INa] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INaL] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_Ito] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_ICaL] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_ICaNa] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_ICaK] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_IKr] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_IKs] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_IK1] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INaCa_i] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INaCa_ss] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INaK] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INab] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_IKb] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_IpCa] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_ICab] << "\t";
+        em_vmcheck << p_em->ALGEBRAIC[land2016_land_T] * 480.0 << "\t";
+        for(int i = 0; i < p_em->states_size; i++){
+          em_vmcheck << p_em->STATES[i];
+          if(i < p_em->states_size-1) {// Add a tab for all but the last element
+              em_vmcheck << "\t";
+          } else {// End the line after the last element
+          em_vmcheck << "\n";
+          }
+        }
         // Increment next_write_time by dtw
         next_write_time += dtw;
         iprint += 1;
       }
     }
     vmcheck.close();
+    em_vmcheck.close();
     end = clock();
     cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
     std::cout << "Simulation is successfully done\n";
     std::cout << "Computational time: " << cpu_time_used << " seconds\n";
     delete p_elec;
     delete p_mech;
+    delete p_em;
   }
   end_total = clock();
   cpu_time_used = ((double) (end - start_total)) / CLOCKS_PER_SEC;

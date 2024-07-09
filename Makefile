@@ -11,7 +11,7 @@ OBJ_DIR=obj
 BIN_DIR=bin
 
 # Target executable name
-TARGET=$(BIN_DIR)/CiPAORdv1
+TARGET=$(BIN_DIR)/cipaordv1_land2016
 
 # Find all cpp files in the src directory plus the main.cpp file
 SOURCES=$(wildcard $(SRC_DIR)/*.cpp) main.cpp
