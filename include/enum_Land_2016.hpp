@@ -32,6 +32,13 @@ enum CONSTANTS{
     C = 27,
     Cd = 28,
     eta = 29,
+    y_1 = 30,
+    y_2 = 31,
+    y_3 = 32,
+    y_4 = 33,
+    y_5 = 34,
+    y_6 = 35,
+    y_7 = 36,
 };
 
 enum ALGEBRAIC{

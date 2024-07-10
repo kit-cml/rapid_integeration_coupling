@@ -15,7 +15,7 @@ public:
   void initConsts(double type);
   void initConsts(double type, double conc, const double *hill, const double *herg );
   void computeRates( double TIME, double *CONSTANTS, double *RATES, double *STATES, double *ALGEBRAIC );
-  void computeRates( double TIME, double *CONSTANTS, double *RATES, double *STATES, double *ALGEBRAIC, double land_trpn );
+  // void computeRates( double TIME, double *CONSTANTS, double *RATES, double *STATES, double *ALGEBRAIC, double land_trpn );
   void solveEuler(double dt);
   // void solveAnalytical( int forward_euler_only, double dt, double *CONSTANTS, double *RATES, double* STATES, double* ALGEBRAIC );
   double tryDt( double dt,

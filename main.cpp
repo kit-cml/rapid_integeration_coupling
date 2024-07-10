@@ -1,6 +1,5 @@
 #include "ohara_rudy_cipa_v1_2017.hpp"
 #include "Land_2016.hpp"
-#include "cipaordv1_land2016.hpp"
 
 #include "omp.h"
 #include "simulationparams.h"
@@ -78,9 +77,9 @@ void solveBDF1(double time, double dt, double epsilon, void* user_data){
     if (norm < epsilon){
       break;
     }   
-    if (iter == 999){
-      std::cout << "BDF1 max iteration exceeded!\n";
-    }
+    // if (iter == 999){
+    //   std::cout << "BDF1 max iteration exceeded!\n";
+    // }
   }
   for (int i = 0; i < data->states_size; i++){
     data->STATES[i] = y_new[i];
@@ -136,16 +135,15 @@ int main(int argc, char* argv[]){
   for (int conc_id = 0; conc_id < params.conc_size; conc_id++){
     // Input for AP simulation
     double t_max = (double) params.beats * params.bcl;
-    double t_curr = 0.0;
-    double dt = 0.0;
+    double t_curr = 0.0, t_mech = 0.0;
+    double dt = 0.0, dt_mech = 0.0;
     double dtw = params.dtw;
     double t_next = t_curr + dtw;
     double next_write_time = t_max - params.bcl;
     double epsilon = 1e-5;
     double conc = params.conc[conc_id];
-    // Input for Land model
-    double y[7] = {0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0};
     int cai_scaling = params.cai_scaling;
+    int mech_jump = 0;
     // Start of calculations
     int imax = int((t_max - next_write_time) / dtw) + 1;// + ((int(t_max) - int(next_write_time)) % int(dtw) == 0 ? 0 : 1);
     Cellmodel* p_elec;
@@ -159,11 +157,7 @@ int main(int argc, char* argv[]){
     p_elec->initConsts(params.celltype,conc,hill.hill,herg.herg); // drug effects
     p_elec->CONSTANTS[BCL] = params.bcl;
     p_mech = new Land_2016();
-    p_mech->initConsts(false, false, y);
-    p_em = new cipaordv1_land2016();
-    p_em->initConsts(params.celltype,conc,hill.hill,herg.herg,false,false); // cipaordv1 drug effects and land2016
-    p_em->CONSTANTS[land2016_cai_scaling] = double(params.cai_scaling);
-    p_em->CONSTANTS[cipaordv1_BCL] = params.bcl;
+    p_mech->initConsts(false, false);
     if (params.forward_euler_only == 1){
       file_name << "vmcheck_";
       file_name << params.drug_name << "_";
@@ -208,35 +202,6 @@ int main(int argc, char* argv[]){
         vmcheck << "\n";
       }
     }
-    vmcheck_name = "em_" + file_name.str();
-    em_vmcheck.open(vmcheck_name.c_str());
-    em_vmcheck << "Time" << "\t";
-    em_vmcheck << "dt" << "\t";
-    em_vmcheck << "INa" << "\t";
-    em_vmcheck << "INaL" << "\t";
-    em_vmcheck << "Ito" << "\t";
-    em_vmcheck << "ICaL" << "\t";
-    em_vmcheck << "ICaNa" << "\t";
-    em_vmcheck << "ICaK" << "\t";
-    em_vmcheck << "IKr" << "\t";
-    em_vmcheck << "IKs" << "\t";
-    em_vmcheck << "IK1" << "\t";
-    em_vmcheck << "INaCa_i" << "\t";
-    em_vmcheck << "INaCa_ss" << "\t";
-    em_vmcheck << "INaK" << "\t";
-    em_vmcheck << "INab" << "\t";
-    em_vmcheck << "IKb" << "\t";
-    em_vmcheck << "IpCa" << "\t";
-    em_vmcheck << "ICab" << "\t";
-    em_vmcheck << "Tension" << "\t";
-    for(int i = 0; i < p_em->states_size; i++) {
-      em_vmcheck << "STATES[" << i << "]";
-      if(i < p_em->states_size-1) {// Add a tab for all but the last element
-        em_vmcheck << "\t";
-      } else {// End the line after the last element
-        em_vmcheck << "\n";
-      }
-    }
     int iprint = 0;
     while(iprint<imax){
       if (cai_scaling == 1){
@@ -249,27 +214,49 @@ int main(int argc, char* argv[]){
                           p_mech->CONSTANTS,
                           p_mech->RATES,
                           p_mech->STATES,
-                          p_mech->ALGEBRAIC,
-                          y);
+                          p_mech->ALGEBRAIC);
+      p_elec->RATES[ca_trpn] = p_elec->CONSTANTS[trpnmax] * p_mech->RATES[TRPN];
       p_elec->computeRates(t_curr,
                           p_elec->CONSTANTS,
                           p_elec->RATES,
                           p_elec->STATES,
-                          p_elec->ALGEBRAIC,
-                          p_mech->RATES[TRPN]);
-      p_em->computeRates(t_curr,
-                          p_em->CONSTANTS,
-                          p_em->RATES,
-                          p_em->STATES,
-                          p_em->ALGEBRAIC);
+                          p_elec->ALGEBRAIC);
       if (params.forward_euler_only == 1){
-        dt = min_dt;
+        // Solve CiPAORdv1
+        dt = max_dt;
         if (t_curr + dt >= next_write_time) {
           dt = next_write_time - t_curr;
         }
-        p_mech->solveEuler(dt);//, t_curr, (p_elec->STATES[cai]));
         p_elec->solveEuler(dt);
-        p_em->solveEuler(dt);
+        // Solve Land2016
+        if (dt >= min_dt){
+          dt_mech = min_dt;
+        } else {
+          dt_mech = dt;
+        }
+        t_mech = t_curr;
+        if (dt > 0 && dt_mech > 0){
+          mech_jump = static_cast<int>(std::ceil(dt/dt_mech));
+          for (int i_jump = 0; i_jump < mech_jump; i_jump++){
+            if (t_mech + dt_mech >= t_curr + dt){
+              dt_mech = t_curr + dt - t_mech;
+            }
+            p_mech->solveEuler(dt_mech);
+            // For next i_jump
+            t_mech = t_mech + dt_mech;
+            if (cai_scaling == 1){
+              p_mech->CONSTANTS[Cai] = p_mech->CONSTANTS[Cai] + p_elec->RATES[cai]*1000.*dt_mech;
+            }
+            else{
+              p_mech->CONSTANTS[Cai] = p_mech->CONSTANTS[Cai] + p_elec->RATES[cai]*dt_mech;
+            }
+            p_mech->computeRates(t_mech,
+                    p_mech->CONSTANTS,
+                    p_mech->RATES,
+                    p_mech->STATES,
+                    p_mech->ALGEBRAIC);
+          }
+        }
       } else {
         if (t_curr <= time_point || (t_curr - floor(t_curr / p_elec->CONSTANTS[BCL]) * p_elec->CONSTANTS[BCL]) <= time_point){
           dt = min_dt;
@@ -279,15 +266,8 @@ int main(int argc, char* argv[]){
         if (t_curr + dt >= next_write_time) {
           dt = next_write_time - t_curr;
         }
+        solveBDF1(t_curr,dt,epsilon,p_mech);
         solveBDF1(t_curr,dt,epsilon,p_elec);
-        if (cai_scaling == 1){
-          p_mech->CONSTANTS[Cai] = p_elec->STATES[cai]*1000.;
-          solveBDF1(t_curr,dt,epsilon,p_mech);
-        } else {
-          p_mech->CONSTANTS[Cai] = p_elec->STATES[cai];
-          solveBDF1(t_curr,dt,epsilon,p_mech);
-        }
-        solveBDF1(t_curr,dt,epsilon,p_em);
       }
       t_curr = t_curr + dt;
       if (t_curr >= next_write_time){
@@ -322,33 +302,6 @@ int main(int argc, char* argv[]){
           vmcheck << "\n";
           }
         }
-        em_vmcheck << iprint * dtw << "\t";
-        em_vmcheck << dt << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INa] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INaL] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_Ito] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_ICaL] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_ICaNa] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_ICaK] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_IKr] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_IKs] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_IK1] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INaCa_i] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INaCa_ss] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INaK] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_INab] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_IKb] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_IpCa] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[cipaordv1_ICab] << "\t";
-        em_vmcheck << p_em->ALGEBRAIC[land2016_land_T] * 480.0 << "\t";
-        for(int i = 0; i < p_em->states_size; i++){
-          em_vmcheck << p_em->STATES[i];
-          if(i < p_em->states_size-1) {// Add a tab for all but the last element
-              em_vmcheck << "\t";
-          } else {// End the line after the last element
-          em_vmcheck << "\n";
-          }
-        }
         // Increment next_write_time by dtw
         next_write_time += dtw;
         iprint += 1;
@@ -362,7 +315,6 @@ int main(int argc, char* argv[]){
     std::cout << "Computational time: " << cpu_time_used << " seconds\n";
     delete p_elec;
     delete p_mech;
-    delete p_em;
   }
   end_total = clock();
   cpu_time_used = ((double) (end - start_total)) / CLOCKS_PER_SEC;

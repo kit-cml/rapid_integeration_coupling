@@ -33,8 +33,7 @@ public:
                            double *hill,
                            bool is_dutta){}
   virtual void initConsts( bool is_skinned, bool BETA, double* y) {}
-  virtual void initConsts( bool is_skinned, 
-                           bool BETA) {}
+  virtual void initConsts( bool is_skinned, bool BETA) {}
   virtual void initConsts (double type,
                            double conc,
                            const double *hill,

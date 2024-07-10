@@ -14,7 +14,7 @@
 Land_2016::Land_2016()
 {
 algebraic_size = 24;
-constants_size = 30;
+constants_size = 30 + 7;
 states_size = 7;
 ALGEBRAIC = new double[algebraic_size];
 CONSTANTS = new double[constants_size];
@@ -40,14 +40,18 @@ void Land_2016::computeRates()
 {
 
 }
-void Land_2016::computeRates(double TIME,
-                double *CONSTANTS,
-                double *RATES,
-                double *STATES,
-                double *ALGEBRAIC){
-                }
-void Land_2016::initConsts(bool is_skinned, bool BETA, double *y)
+void Land_2016::initConsts(bool is_skinned, bool BETA)
 {
+    // Input for Land model
+    // double y[7] = {0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0};
+    CONSTANTS[y_1] = 0.0;
+    CONSTANTS[y_2] = 0.0;
+    CONSTANTS[y_3] = 0.0;
+    CONSTANTS[y_4] = 1.0;
+    CONSTANTS[y_5] = 0.0;
+    CONSTANTS[y_6] = 0.0;
+    CONSTANTS[y_7] = 0.0;
+
     // user input
     CONSTANTS[dlambda_dt] = 0; 
     CONSTANTS[lambda] = 1.0;
@@ -110,13 +114,13 @@ if (CONSTANTS[lambda] >= 1.2){
     CONSTANTS[k_uw] = 0.026 * CONSTANTS[nu];
 
     //STATES Variables
-    if(y[0]>0) STATES[XS] = fmax(0,y[0]);
-    if(y[1]>0) STATES[XW] = fmax(0,y[1]);
-    if(y[2]>0) STATES[TRPN] = fmax(0,y[2]);
-    STATES[TmBlocked] = y[3];
-    STATES[ZETAS] = y[4];
-    STATES[ZETAW] = y[5];
-    STATES[dCd_dt] = y[6];
+    if(CONSTANTS[y_1]>0) STATES[XS] = fmax(0,CONSTANTS[y_1]);
+    if(CONSTANTS[y_2]>0) STATES[XW] = fmax(0,CONSTANTS[y_2]);
+    if(CONSTANTS[y_3]>0) STATES[TRPN] = fmax(0,CONSTANTS[y_3]);
+    STATES[TmBlocked] = CONSTANTS[y_4];
+    STATES[ZETAS] = CONSTANTS[y_5];
+    STATES[ZETAW] = CONSTANTS[y_6];
+    STATES[dCd_dt] = CONSTANTS[y_7];
     // printf("initialisation\n");
 
 
@@ -130,9 +134,11 @@ if (CONSTANTS[lambda] >= 1.2){
 
 }
 
-void Land_2016::computeRates(double TIME, double *CONSTANTS, double *RATES, double *STATES, double *ALGEBRAIC, double *y)
+void Land_2016::computeRates(double TIME, double *CONSTANTS, double *RATES, double *STATES, double *ALGEBRAIC)
 {
 // XB model
+// Input for Land model
+// double y[7] = {0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0};
 
 // lambda = min(1.2,lambda);
 // Lfac =  max(0, 1 + beta_0 * (lambda + min(0.87,lambda) - 1.87) );
@@ -218,14 +224,14 @@ RATES[ZETAW] = CONSTANTS[A] * CONSTANTS[dlambda_dt] - ALGEBRAIC[cdw] * STATES[ZE
 
 //-------------------------------------------------------------------------------
 // Passive model
-// this is quite scary, did not fix the problem but Cd actually y[6] aka y(7)
+// this is quite scary, did not fix the problem but Cd actually CONSTANTS[y_7] aka y(7)
 //-------------------------------------------------------------------------------
 
 // Cd = y(7);
 // C = lambda - 1;
 
 // CONSTANTS[Cd] = STATES[dCd_dt]; 
-CONSTANTS[Cd] = y[6];
+CONSTANTS[Cd] = CONSTANTS[y_7];
 CONSTANTS[C] = CONSTANTS[lambda] - 1;
 
 // if (C - Cd) < 0
