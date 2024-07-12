@@ -30,12 +30,6 @@ simulation_params load_params(const char* filename) {
                 continue;
             }
             params.celltype = tempDouble;
-        } else if (key == "forward_euler_only") {
-            if (!(iss >> tempInt)) {
-                std::cerr << "Invalid format for euler only" << std::endl;
-                continue;
-            }
-            params.forward_euler_only = tempInt;
         } else if (key == "bcl") {
             if (!(iss >> tempDouble)) {
                 std::cerr << "Invalid format for bcl" << std::endl;

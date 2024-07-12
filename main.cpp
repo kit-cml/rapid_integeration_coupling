@@ -52,7 +52,7 @@ void solveBDF1(double time, double dt, double epsilon, void* user_data){
     y_new[i] = y[i]; // Initial guess
   }
   // Newton-Raphson iterations
-  for (int iter = 0; iter < 1000; ++iter) { 
+  for (int iter = 0; iter < 10000; ++iter) { 
     // rhs_fn(time,y_new,F,data);
     data->computeRates(time,data->CONSTANTS,F,y_new,data->ALGEBRAIC);
     for (int i = 0; i < data->states_size; ++i) {
@@ -99,7 +99,6 @@ int main(int argc, char* argv[]){
   simulation_params params = load_params(argv[1]);
   std::cout << "Running simulation with parameters:" << std::endl;
   std::cout << "celltype : " << params.celltype << std::endl;
-  std::cout << "forward_euler_only : " << params.forward_euler_only << std::endl;
   std::cout << "bcl (ms): " << params.bcl << std::endl;
   std::cout << "beats : " << params.beats << std::endl;
   std::cout << "dtw (ms): " << params.dtw << std::endl;
@@ -140,10 +139,11 @@ int main(int argc, char* argv[]){
     double dtw = params.dtw;
     double t_next = t_curr + dtw;
     double next_write_time = t_max - params.bcl;
-    double epsilon = 1e-5;
+    double epsilon = 1e-4;
     double conc = params.conc[conc_id];
     int cai_scaling = params.cai_scaling;
     int mech_jump = 0;
+    double cai_rates = 0.0;
     // Start of calculations
     int imax = int((t_max - next_write_time) / dtw) + 1;// + ((int(t_max) - int(next_write_time)) % int(dtw) == 0 ? 0 : 1);
     Cellmodel* p_elec;
@@ -158,17 +158,10 @@ int main(int argc, char* argv[]){
     p_elec->CONSTANTS[BCL] = params.bcl;
     p_mech = new Land_2016();
     p_mech->initConsts(false, false);
-    if (params.forward_euler_only == 1){
-      file_name << "vmcheck_";
-      file_name << params.drug_name << "_";
-      file_name << conc << ".plt";
-    } else {
-      file_name << "vmcheck_";
-      file_name << params.drug_name << "_";
-      file_name << conc << "_";
-      file_name << params.min_dt << "_";
-      file_name << params.max_dt << ".plt";
-    }
+    file_name << "vmcheck_";
+    file_name << params.drug_name << "_";
+    file_name << conc << ".plt";
+
     vmcheck_name = file_name.str();
     vmcheck.open(vmcheck_name.c_str());
     vmcheck << "Time" << "\t";
@@ -221,53 +214,40 @@ int main(int argc, char* argv[]){
                           p_elec->RATES,
                           p_elec->STATES,
                           p_elec->ALGEBRAIC);
-      if (params.forward_euler_only == 1){
-        // Solve CiPAORdv1
-        dt = max_dt;
-        if (t_curr + dt >= next_write_time) {
-          dt = next_write_time - t_curr;
-        }
-        p_elec->solveEuler(dt);
-        // Solve Land2016
-        if (dt >= min_dt){
-          dt_mech = min_dt;
-        } else {
-          dt_mech = dt;
-        }
-        t_mech = t_curr;
-        if (dt > 0 && dt_mech > 0){
-          mech_jump = static_cast<int>(std::ceil(dt/dt_mech));
-          for (int i_jump = 0; i_jump < mech_jump; i_jump++){
-            if (t_mech + dt_mech >= t_curr + dt){
-              dt_mech = t_curr + dt - t_mech;
-            }
-            p_mech->solveEuler(dt_mech);
-            // For next i_jump
-            t_mech = t_mech + dt_mech;
-            if (cai_scaling == 1){
-              p_mech->CONSTANTS[Cai] = p_mech->CONSTANTS[Cai] + p_elec->RATES[cai]*1000.*dt_mech;
-            }
-            else{
-              p_mech->CONSTANTS[Cai] = p_mech->CONSTANTS[Cai] + p_elec->RATES[cai]*dt_mech;
-            }
-            p_mech->computeRates(t_mech,
-                    p_mech->CONSTANTS,
-                    p_mech->RATES,
-                    p_mech->STATES,
-                    p_mech->ALGEBRAIC);
-          }
-        }
+      // Solve CiPAORdv1
+      dt = max_dt;
+      if (t_curr + dt >= next_write_time){
+        dt = next_write_time - t_curr;
+      }
+      p_elec->solveEuler(dt);
+      // Solve Land2016
+      if (dt >= min_dt){
+        dt_mech = min_dt;
       } else {
-        if (t_curr <= time_point || (t_curr - floor(t_curr / p_elec->CONSTANTS[BCL]) * p_elec->CONSTANTS[BCL]) <= time_point){
-          dt = min_dt;
+        dt_mech = dt;
+      }
+      t_mech = t_curr;
+      if (dt > 0 && dt_mech > 0){
+        mech_jump = static_cast<int>(std::ceil(dt/dt_mech));
+        if (cai_scaling == 1){
+          cai_rates = p_elec->RATES[ca_trpn] * 1000.0;
         } else {
-          dt = max_dt;
+          cai_rates = p_elec->RATES[ca_trpn];
         }
-        if (t_curr + dt >= next_write_time) {
-          dt = next_write_time - t_curr;
+        for (int i_jump = 0; i_jump < mech_jump; i_jump++){
+          if (t_mech + dt_mech >= t_curr + dt){
+            dt_mech = t_curr + dt - t_mech;
+          }
+          p_mech->solveEuler(dt_mech);
+          // For next i_jump
+          t_mech = t_mech + dt_mech;
+          p_mech->CONSTANTS[Cai] = p_mech->CONSTANTS[Cai] + cai_rates*dt_mech;
+          p_mech->computeRates(t_mech,
+                  p_mech->CONSTANTS,
+                  p_mech->RATES,
+                  p_mech->STATES,
+                  p_mech->ALGEBRAIC);
         }
-        solveBDF1(t_curr,dt,epsilon,p_mech);
-        solveBDF1(t_curr,dt,epsilon,p_elec);
       }
       t_curr = t_curr + dt;
       if (t_curr >= next_write_time){

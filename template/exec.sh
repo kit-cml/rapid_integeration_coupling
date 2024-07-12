@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the path to the executable and the log file
-EXECUTABLE="/home/ali/CiPAORdv1.0_Land_rapid_integration/bin/CiPAORdv1"
+EXECUTABLE="/home/ali/CiPAORdv1.0_Land_rapid_integration/bin/cipaordv1_land2016"
 PARAMS_FILE="params.txt"
 HILL_DATA_FILE="/home/ali/CiPAORdv1.0_Land_rapid_integration/hill_data/bepridil.csv"
 HERG_DATA_FILE="/home/ali/CiPAORdv1.0_Land_rapid_integration/herg_data/bepridil.csv"
